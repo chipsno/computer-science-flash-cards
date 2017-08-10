@@ -10,8 +10,9 @@ app.config.from_object(__name__)
 app.config.update(dict(
     DATABASE=os.path.join(app.root_path, 'db', 'cards.db'),
     SECRET_KEY='development key',
-    USERNAME='admin',
-    PASSWORD='default'
+    USERNAME='aa',
+    PASSWORD='123',
+    USERNAME2='cc'
 ))
 app.config.from_envvar('CARDS_SETTINGS', silent=True)
 
@@ -83,12 +84,13 @@ def filter_cards(filter_name):
     if not session.get('logged_in'):
         return redirect(url_for('login'))
 
+    username = ' and username = \'' + session.get('username') + '\' '
     filters = {
-        "all":      "where 1 = 1",
-        "general":  "where type = 1",
-        "code":     "where type = 2",
-        "known":    "where known = 1",
-        "unknown":  "where known = 0",
+        "all":      "where 1 = 1" + username,
+        "general":  "where type = 1" + username,
+        "code":     "where type = 2" + username,
+        "known":    "where known = 1" + username,
+        "unknown":  "where known = 0" + username,
     }
 
     query = filters.get(filter_name)
@@ -108,10 +110,11 @@ def add_card():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     db = get_db()
-    db.execute('INSERT INTO cards (type, front, back) VALUES (?, ?, ?)',
+    db.execute('INSERT INTO cards (type, front, back, username) VALUES (?, ?, ?)',
                [request.form['type'],
                 request.form['front'],
-                request.form['back']
+                request.form['back'],
+                session.get('username') 
                 ])
     db.commit()
     flash('New card was successfully added.')
@@ -220,11 +223,12 @@ def get_card(type):
       WHERE
         type = ?
         and known = 0
+        and username = ?
       ORDER BY RANDOM()
       LIMIT 1
     '''
 
-    cur = db.execute(query, [type])
+    cur = db.execute(query, [type, session.get('username')])
     return cur.fetchone()
 
 
@@ -237,10 +241,11 @@ def get_card_by_id(card_id):
       FROM cards
       WHERE
         id = ?
+        and username = ?
       LIMIT 1
     '''
 
-    cur = db.execute(query, [card_id])
+    cur = db.execute(query, [card_id, session.get('username')])
     return cur.fetchone()
 
 
@@ -259,12 +264,13 @@ def mark_known(card_id, card_type):
 def login():
     error = None
     if request.method == 'POST':
-        if request.form['username'] != app.config['USERNAME']:
+        if request.form['username'] != app.config['USERNAME'] or request.form['username'] != app.config['USERNAME2']:
             error = 'Invalid username or password!'
         elif request.form['password'] != app.config['PASSWORD']:
             error = 'Invalid username or password!'
         else:
             session['logged_in'] = True
+            session['username'] = request.form['username']
             session.permanent = True  # stay logged in
             return redirect(url_for('cards'))
     return render_template('login.html', error=error)
@@ -273,6 +279,7 @@ def login():
 @app.route('/logout')
 def logout():
     session.pop('logged_in', None)
+    session.pop('username', None)
     flash("You've logged out")
     return redirect(url_for('index'))
 
